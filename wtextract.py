@@ -6,11 +6,11 @@ import re
 
 """
 In fr wiktionary, the french words are described using {{-nom-|fr}} (until the next {{-*-}}).
-If masculin: {{m}} 
-if feminin: {{f}}
+If masculin: {{m}} {{msing}}
+if feminin: {{f}} {{fsing}}
 if both: {{mf}} 
 It can have several entries, both might be any of the forms.
-TODO: Maybe also save plural form? (noter si {{invar}}?)
+TODO: Maybe also save plural form? (note if {{invar}} {{invariable}} {{*sing}}?)
 every word starting with vowel or h have l' instead of le/la.
 
 
@@ -35,7 +35,8 @@ class wikihandler(object):
 
     re_is_level_2 = re.compile(r"{{-\w+-(\|\w+)?}}")
     re_is_nom_fr = re.compile(r"{{-nom-\|fr}}")
-    re_get_gender = re.compile(r"{{(f|m|mf)}}")
+    re_get_gender = re.compile(r"{{(f|fsing|m|msing|mf)(\|[^}]*)*}}")
+    gender_2_letter = {"f": "f", "fsing": "f", "m": "m", "msing": "m", "mf": "mf"}
     
     def __str__(self):
         return self.title + u"\t" + u",".join(self.gender)
@@ -53,6 +54,9 @@ class wikihandler(object):
         # name should be like -nom-|fr
         """
         if self.re_is_nom_fr.match(name):
+            # don't match special pages
+            if self.title.startswith("Wiktionnaire:"):
+                return
             self.in_nom_fr = True
             self.is_nom_fr = True
         else:
@@ -64,7 +68,7 @@ class wikihandler(object):
 #            print data
             match = self.re_get_gender.search(data)
             if match:
-                g = match.group(0).lstrip("{").rstrip("}")
+                g = self.gender_2_letter[match.group(1)]
                 self.gender.append(g)
         
 
@@ -76,7 +80,7 @@ class xmlhandler(object):
         self.wh = None
         self.title = ""
         self.content = ""
-        
+
     # 3 handler functions
     def start_element(self, name, attrs):
 #        print 'Start element:', name, attrs
@@ -92,7 +96,7 @@ class xmlhandler(object):
         if name == "page":
             self.in_page = False
             if self.wh.is_nom_fr:
-                print unicode(self.wh)
+                print unicode(self.wh).encode("utf-8")
             self.wh = None
             self.title = ""
             self.content = ""
