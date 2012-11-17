@@ -11,7 +11,10 @@ if feminin: {{f}} {{fsing}}
 if both: {{mf}} 
 It can have several entries, both might be any of the forms.
 TODO: Maybe also save plural form? (note if {{invar}} {{invariable}} {{*sing}}?)
-every word starting with vowel or h have l' instead of le/la.
+every word starting with vowel or h have l' instead of le/la, excepted if h is "aspiré"
+({{h|*}}). Also not clear for Y: it seems it has elision if it's pronounced like 'i' (and
+not 'j'), which is about the same as there is a consonant afterwards.
++ a few like onze/onzieme/11e, héro 
 
 
 Test:
@@ -21,7 +24,15 @@ livre
 in-trente-deux
 hotel
 avocat
+onze
+fille
+chose
 """
+
+# according to many grammar books, there is no appostrophe is h aspiré or these
+# "2" words. However, it's not sure all h aspiré words are classified, and there
+# might be more exceptions, so need to check!
+no_apostrophe = [u"onze", u"onzième", u"héro", u"11", u"11e", u"i", u"y"]
 
 class wikihandler(object):
     """
@@ -32,14 +43,34 @@ class wikihandler(object):
         self.in_nom_fr = False
         self.is_nom_fr = False
         self.gender = [] # list of strings (for each nom-fr)
+        # e if normally elided
+        # i if starts with y that sounds like i (=> elided)
+        # h if h aspiré
+        # n if could find an example of the word without elision
+        # y if could find an example with the elision
+        # N if part of whitelist not in elision
+        self.elision = set() # set of strings
+        
+        # manage elision
+        if self.re_has_elision.match(title.lower()):
+            self.elision.add("e")
+        if title in no_apostrophe:
+            self.elision.add("N")
+        
 
     re_is_level_2 = re.compile(r"{{-\w+-(\|\w+)?}}")
-    re_is_nom_fr = re.compile(r"{{-nom-\|fr}}")
+    re_is_nom_fr = re.compile(r"{{-(nom|lettre)-\|fr}}")
+    
+    re_has_elision = re.compile(u"(a|â|à|ä|e|é|è|ê|ë|i|ì|ï|o|ò|ô|ö|u|ù|û|ü|h).*") # the basic rule 
+    re_is_h_aspire = re.compile(u"{{h( aspiré)?(\\|[^}]*)*}}")
+    re_pron_starts_with_i = re.compile(r"{{pron\|i.*}}")
+    # some words definitions don't have gender explicitly but have a table
+    # For example Juif {{fr-accord-if|Ju|ʒɥ}} => m
     re_get_gender = re.compile(r"{{(f|fsing|m|msing|mf)(\|[^}]*)*}}")
     gender_2_letter = {"f": "f", "fsing": "f", "m": "m", "msing": "m", "mf": "mf"}
     
     def __str__(self):
-        return self.title + u"\t" + u",".join(self.gender)
+        return u"%s\t%s\t%s" % (self.title, u",".join(self.gender), u",".join(sorted(self.elision)))
     
     def feed(self, data):
         m = self.re_is_level_2.search(data)
@@ -59,9 +90,19 @@ class wikihandler(object):
                 return
             self.in_nom_fr = True
             self.is_nom_fr = True
+            # TODO {{-flex-nom-|fr}}, e.g. Juive
+            
+            # TODO cet + mon/ton/son on feminine words are also sign of elision
+            # tricky because of false positives in coloquial examples: "Y’a pas l’feu."
+            safet = re.escape(self.title)
+            # cet hiver/l'hiver/d'hiver
+            self.re_example_elision = re.compile(u"\\b(cet\\s|(l|d)('|’))(''')?%s\\b" % safet) # ''' is for bold formatting
+            self.re_example_no_elision = re.compile(u"\\b(la|le|du|de|ce|ma|ta|sa)\\s(''')?%s\\b" % safet)
+            
         else:
             # TODO: detect that no gender was given for this definition
             self.in_nom_fr = False
+            
             
     def char_data(self, data):
         if self.in_nom_fr:
@@ -70,8 +111,16 @@ class wikihandler(object):
             if match:
                 g = self.gender_2_letter[match.group(1)]
                 self.gender.append(g)
-        
-
+            # search elision
+            if self.re_is_h_aspire.search(data):
+                self.elision.add("h")
+            if self.title.lower()[0] == "y" and self.re_pron_starts_with_i.search(data):
+                self.elision.add("i")
+            if self.re_example_elision.search(data):
+                self.elision.add("y")
+            if self.re_example_no_elision.search(data):
+                self.elision.add("n")
+                
 class xmlhandler(object):
     def __init__(self):
         self.in_page = False
